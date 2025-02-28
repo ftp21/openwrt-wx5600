@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/configs/mt7986_zyxel_wx5600-t0_defconfig
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,136 @@
 +CONFIG_ARM=y
 +CONFIG_SYS_HAS_NONCACHED_MEMORY=y
 +CONFIG_POSITION_INDEPENDENT=y
@@ -131,9 +131,15 @@
 +CONFIG_ZSTD=y
 +CONFIG_HEXDUMP=y
 +CONFIG_LMB_MAX_REGIONS=64
++CONFIG_PHY_ETHERNET_ID=y
++CONFIG_PCIE_MEDIATEK=y
++CONFIG_DM_ETH_PHY=y
++CONFIG_DM_MDIO=y
++CONFIG_CMD_MDIO=y
++CONFIG_CMD_MII=y
 --- /dev/null
 +++ b/arch/arm/dts/mt7986a-zyxel_wx5600-t0.dts
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,182 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Author: Valerio 'ftp21' Mancini <ftp21@ftp21.eu>
@@ -178,15 +184,15 @@
 +	leds {
 +		compatible = "gpio-leds";
 +
-+		led_status_green: pwr {
++		led_pwr_green: pwr {
 +			label = "green:status";
 +			gpios = <&gpio 13 GPIO_ACTIVE_HIGH>;
-+			default-state = "off";
++			default-state = "on";
 +		};
 +
 +		led_wps_green: wps {
 +			label = "green:wps";
-+			gpios = <&gpio 17 GPIO_ACTIVE_HIGH>;
++			gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
 +			default-state = "off";
 +		};
 +	};
@@ -204,21 +210,19 @@
 +};
 +
 +&eth {
-+	status = "okay";
-+	mediatek,gmac-id = <0>;
-+	phy-mode = "sgmii";
-+	reset-gpios = <&gpio 6 GPIO_ACTIVE_LOW>;
-+   phy-handle = <&phy5>;
-+   phy5: eth-phy@5 {
-+       compatible = "ethernet-phy-id67c9.de0a";
-+       reg = <5>;
-+       phy-mode = "sgmii";
-+   };
-+
-+	fixed-link {
-+		speed = <2500>;
-+		full-duplex;
-+	};
++        status = "okay";
++        mediatek,gmac-id = <0>;
++        mediatek,sgmiisys = <&sgmiisys1>;
++        phy-mode = "sgmii";
++        phy-handle = <&phy6>;
++        phy6: eth-phy@6 {
++                compatible = "ethernet-phy-id67c9.de10";
++                phy-mode = "sgmii";
++                reg = <6>;
++                reset-gpios = <&gpio 6 GPIO_ACTIVE_LOW>;
++                reset-assert-us = <600>;
++                reset-deassert-us = <20000>;
++        };
 +};
 +
 +&pinctrl {
