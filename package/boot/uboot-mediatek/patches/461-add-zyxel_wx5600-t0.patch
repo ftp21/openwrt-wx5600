@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/configs/mt7986_zyxel_wx5600-t0_defconfig
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,137 @@
 +CONFIG_ARM=y
 +CONFIG_SYS_HAS_NONCACHED_MEMORY=y
 +CONFIG_POSITION_INDEPENDENT=y
@@ -97,7 +97,7 @@
 +CONFIG_LED=y
 +CONFIG_LED_BLINK=y
 +CONFIG_LED_GPIO=y
-+# CONFIG_MMC is not set
++CONFIG_PHY_MXL_GPY=y
 +CONFIG_MTD=y
 +CONFIG_DM_MTD=y
 +CONFIG_MTD_SPI_NAND=y
@@ -137,9 +137,10 @@
 +CONFIG_DM_MDIO=y
 +CONFIG_CMD_MDIO=y
 +CONFIG_CMD_MII=y
++CONFIG_PHY_ADDR=6
 --- /dev/null
 +++ b/arch/arm/dts/mt7986a-zyxel_wx5600-t0.dts
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,184 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Author: Valerio 'ftp21' Mancini <ftp21@ftp21.eu>
@@ -215,14 +216,16 @@
 +        mediatek,sgmiisys = <&sgmiisys1>;
 +        phy-mode = "sgmii";
 +        phy-handle = <&phy6>;
-+        phy6: eth-phy@6 {
++        mdio-bus {
++           phy6: eth-phy@6 {
 +                compatible = "ethernet-phy-id67c9.de10";
 +                phy-mode = "sgmii";
 +                reg = <6>;
 +                reset-gpios = <&gpio 6 GPIO_ACTIVE_LOW>;
 +                reset-assert-us = <600>;
 +                reset-deassert-us = <20000>;
-+        };
++           };
++       };
 +};
 +
 +&pinctrl {
@@ -381,3 +384,75 @@
 +_firstboot=setenv _firstboot ; run ethaddr_factory ; run _switch_to_menu ; run _init_env ; run boot_first
 +_switch_to_menu=setenv _switch_to_menu ; setenv bootdelay 3 ; setenv bootmenu_delay 3 ; setenv bootmenu_0 $bootmenu_0d ; setenv bootmenu_0d ; run _bootmenu_update_title
 +_bootmenu_update_title=setenv _bootmenu_update_title ; setenv bootmenu_title "$bootmenu_title       [33m$ver[0m"
+--- /dev/null
++++ b/drivers/net/phy/mxl-gpy.c
+@@ -0,0 +1,47 @@
++// SPDX-License-Identifier: GPL-2.0+
++#include <phy.h>
++#include <linux/bitfield.h>
++
++/* PHY ID */
++#define PHY_ID_GPY211C		0x67C9DE10
++
++
++static int gpy211_probe(struct phy_device *phydev)
++{
++	phydev->flags |= PHY_FLAG_BROKEN_RESET;
++	return 0;
++}
++
++static int gpy211_config(struct phy_device *phydev)
++{
++	phy_write_mmd(phydev, MDIO_MMD_VEND1, 8, 0xa4fa);
++	debug("\n\n\n\n GPY211 CONFIGURATO \n\n\n\n");
++	return 0;
++}
++
++static int gpy211_startup(struct phy_device *phydev)
++{
++	int ret;
++
++	ret = genphy_update_link(phydev);
++	if (ret)
++		return ret;
++
++	phydev->speed = SPEED_1000;
++	phydev->duplex = DUPLEX_FULL;
++
++	return 0;
++}
++
++
++
++U_BOOT_PHY_DRIVER(mxl_gpy) = {
++	.name = "MaxLinear/Intel GPY211C 10/100/1000/2500Mbps Ethernet",
++	.uid = PHY_ID_GPY211C,
++	.mask = 0xffffff00,
++	.features = PHY_GBIT_FEATURES,
++	.probe = &gpy211_probe,
++	.config = &gpy211_config,
++	.startup = &gpy211_startup,
++	.shutdown = &genphy_shutdown,
++};
++
+--- /dev/null
++++ b/drivers/net/phy/Makefile
+@@ -44,3 +44,4 @@
+ obj-$(CONFIG_PHY_MSCC) += mscc.o
+ obj-$(CONFIG_PHY_FIXED) += fixed.o
+ obj-$(CONFIG_PHY_NCSI) += ncsi.o
++obj-$(CONFIG_PHY_MXL_GPY) += mxl-gpy.o
+--- /dev/null
++++ b/drivers/net/phy/Kconfig
+@@ -380,6 +380,11 @@
+        help
+          This adds support for the Intel XWAY (formerly Lantiq) Gbe PHYs.
+
++config PHY_MXL_GPY
++       bool "MaxLinear/Intel GPY211 support"
++       help
++         This adds support for the MaxLinear/Intel GPY211 support Gbe PHYs.
++
+ config PHY_ETHERNET_ID
+        bool "Read ethernet PHY id"
+        depends on DM_GPIO
