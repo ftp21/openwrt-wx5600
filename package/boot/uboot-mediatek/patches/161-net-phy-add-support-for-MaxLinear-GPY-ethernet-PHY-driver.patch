@@ -1,0 +1,198 @@
+--- a/drivers/net/phy/Kconfig
++++ b/drivers/net/phy/Kconfig
+@@ -380,6 +380,15 @@
+        help
+          This adds support for the Intel XWAY (formerly Lantiq) Gbe PHYs.
+
++config PHY_MXL_GPY
++       bool "MaxLinear GPY PHY driver"
++       help
++         This driver supports various MaxLinear GPY PHYs, including:
++         - GPY115 (1G Ethernet PHY)
++         - GPY211/211C (2.5G Ethernet PHY)
++         - GPY212 (2.5G Ethernet PHY)
++         - GPY215 (2.5G Ethernet PHY)
++
+ config PHY_ETHERNET_ID
+        bool "Read ethernet PHY id"
+        depends on DM_GPIO
+--- a/drivers/net/phy/Makefile
++++ b/drivers/net/phy/Makefile
+@@ -44,3 +44,4 @@
+ obj-$(CONFIG_PHY_MSCC) += mscc.o
+ obj-$(CONFIG_PHY_FIXED) += fixed.o
+ obj-$(CONFIG_PHY_NCSI) += ncsi.o
++obj-$(CONFIG_PHY_MXL_GPY) += mxl-gpy.o
+--- /dev/null
++++ b/drivers/net/phy/mxl-gpy.c
+@@ -0,0 +1,169 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Maxlinear GPY PHY driver for U-Boot
++ * Supports all GPY family PHY IDs
++ * Minimal implementation based on Linux kernel driver
++ */
++#include <phy.h>
++#include <linux/bitfield.h>
++
++/* MaxLinear GPY PHY identifiers - Complete list */
++#define PHY_ID_GPY2xx                   0x67C9DC00
++#define PHY_ID_GPY115B                  0x67C9DF00
++#define PHY_ID_GPY115C                  0x67C9DF10
++#define PHY_ID_GPY211B                  0x67C9DE08
++#define PHY_ID_GPY211C                  0x67C9DE10
++#define PHY_ID_GPY212B                  0x67C9DE09
++#define PHY_ID_GPY212C                  0x67C9DE20
++#define PHY_ID_GPY215B                  0x67C9DF04
++#define PHY_ID_GPY215C                  0x67C9DF20
++#define PHY_ID_GPY241B                  0x67C9DE40
++#define PHY_ID_GPY241BM                 0x67C9DE80
++#define PHY_ID_GPY245B                  0x67C9DEC0
++
++/* Common mask for all GPY PHYs */
++#define PHY_ID_GPY_MASK                 0xFFFF0000
++/* More specific mask for exact model detection */
++#define PHY_ID_EXACT_MASK               0xFFFFFFFF
++
++/* MMD registers access */
++#define MDIO_MMD_VEND1                  0x1e
++
++/* GPY PHY MMD registers */
++#define GPY_MMD_CONFIG                  0x8    /* Configuration register */
++#define GPY_MMD_SPEED_CONFIG            0x834  /* Speed configuration register */
++#define GPY_MMD_ABILITY                 0x7    /* PHY ability register */
++
++/* GPY MMD_CONFIG register values */
++#define GPY_2500BASE_X_CONFIG           0xa4fa /* Configure for 2.5GBase-X operation */
++#define GPY_1000BASE_X_CONFIG           0xa4f2 /* Configure for 1000Base-X operation */
++
++/* GPY MMD_SPEED_CONFIG register values */
++#define GPY_2500_SPEED                  0x0001 /* 2.5 Gbps speed setting */
++#define GPY_1000_SPEED                  0x0000 /* 1.0 Gbps speed setting */
++
++/**
++ * gpy_phy_probe - Initial probe function for GPY PHYs
++ * @phydev: The PHY device
++ *
++ * This function is called during initial PHY detection.
++ * Sets flags necessary for correct operation based on PHY ID.
++ */
++static int gpy_phy_probe(struct phy_device *phydev)
++{
++	/* This PHY family has issues with standard reset procedure */
++	phydev->flags |= PHY_FLAG_BROKEN_RESET;
++	
++	/* Log which PHY model was detected */
++	printf("MaxLinear GPY PHY detected: 0x%08x\n", phydev->phy_id);
++	
++	return 0;
++}
++
++/**
++ * gpy_phy_get_max_speed - Get maximum supported speed based on PHY ID
++ * @phy_id: The PHY identifier
++ *
++ * Returns the maximum speed supported by the specific PHY model.
++ */
++static int gpy_phy_get_max_speed(unsigned int phy_id)
++{
++	/* 2.5G capable models */
++	switch (phy_id) {
++	case PHY_ID_GPY211B:
++	case PHY_ID_GPY211C:
++	case PHY_ID_GPY212B:
++	case PHY_ID_GPY212C:
++	case PHY_ID_GPY215B:
++	case PHY_ID_GPY215C:
++	case PHY_ID_GPY241B:
++	case PHY_ID_GPY241BM:
++	case PHY_ID_GPY245B:
++		return SPEED_2500;
++	/* 1G capable models */
++	case PHY_ID_GPY2xx:
++	case PHY_ID_GPY115B:
++	case PHY_ID_GPY115C:
++	default:
++		return SPEED_1000;
++	}
++}
++
++/**
++ * gpy_phy_config - Configure the GPY PHY
++ * @phydev: The PHY device
++ *
++ * This function configures the PHY for optimal operation based on model
++ */
++static int gpy_phy_config(struct phy_device *phydev)
++{
++	int ret;
++	int max_speed = gpy_phy_get_max_speed(phydev->phy_id);
++	u16 config_val, speed_val;
++	
++	/* Determine configuration values based on speed */
++	if (max_speed == SPEED_2500) {
++		config_val = GPY_2500BASE_X_CONFIG;
++		speed_val = GPY_2500_SPEED;
++	} else {
++		config_val = GPY_1000BASE_X_CONFIG;
++		speed_val = GPY_1000_SPEED;
++	}
++
++	/* Configure the PHY for appropriate Base-X operation */
++	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, GPY_MMD_CONFIG, 
++		config_val);
++	if (ret < 0)
++		return ret;
++
++	/* Set speed explicitly */
++	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, GPY_MMD_SPEED_CONFIG,
++		speed_val);
++	if (ret < 0)
++		return ret;
++
++	/* No auto-negotiation needed for Base-X modes */
++	phydev->autoneg = AUTONEG_DISABLE;
++
++	return 0;
++}
++
++/**
++ * gpy_phy_startup - Initialize the GPY PHY
++ * @phydev: The PHY device
++ *
++ * This function is called to initialize the PHY and check link status.
++ */
++static int gpy_phy_startup(struct phy_device *phydev)
++{
++	int ret;
++	int max_speed = gpy_phy_get_max_speed(phydev->phy_id);
++
++	/* Update link status */
++	ret = genphy_update_link(phydev);
++	if (ret)
++		return ret;
++
++	/* Force speed and duplex based on PHY model */
++	phydev->speed = max_speed;
++	phydev->duplex = DUPLEX_FULL;
++
++	/* Print PHY status for debugging */
++	printf("GPY PHY initialized: %s - %dMbps/%s\n",
++		phydev->link ? "link up" : "link down",
++		phydev->speed,
++		phydev->duplex == DUPLEX_FULL ? "full" : "half");
++
++	return 0;
++}
++
++U_BOOT_PHY_DRIVER(gpy) = {
++	.name = "MaxLinear GPY 2XX",
++	.uid = PHY_ID_GPY2xx,
++	.mask = PHY_ID_GPY_MASK,
++	.features = PHY_GBIT_FEATURES,
++	.probe = &gpy_phy_probe,
++	.config = &gpy_phy_config,
++	.startup = &gpy_phy_startup,
++	.shutdown = &genphy_shutdown,
++};
++
