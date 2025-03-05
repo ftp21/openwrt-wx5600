@@ -163,6 +163,11 @@ zyxel,nwa50ax-pro)
 	ucidef_set_led_netdev "uplink" "UPLINK" "mdio-bus:05:amber:wan" "eth0" "link_10 link_100 link_2500 tx rx"
 	ucidef_set_led_netdev "uplink" "UPLINK" "mdio-bus:05:green:wan" "eth0" "link_1000 link_2500 tx rx"
 	;;
+zyxel,wx5600-t0-ubootmod)
+	ucidef_set_led_netdev "lan-port" "LAN-PORT" "mdio-bus:05:green:lan" "eth1" "link tx rx"
+	ucidef_set_led_netdev "wan-port" "WAN-PORT" "mdio-bus:06:green:wan" "eth0" "link_2500"
+	ucidef_set_led_netdev "wan" "wan" "green:wan-0" "eth1" "link tx rx"
+	ucidef_set_led_netdev "wlan" "wlan" "green:wlan-0" "phy0-ap0 phy1-ap0" "link tx rx"
 esac
 
 board_config_flush

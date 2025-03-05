@@ -194,13 +194,13 @@
 +
 +		led_pwr_green: pwr {
 +			label = "green:status";
-+			gpios = <&gpio 13 GPIO_ACTIVE_HIGH>;
-+			default-state = "on";
++			gpios = <&gpio 12 GPIO_ACTIVE_LOW>;
++			default-state = "off";
 +		};
 +
 +		led_wps_green: wps {
 +			label = "green:wps";
-+			gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
++			gpios = <&gpio 17 GPIO_ACTIVE_HIGH>;
 +			default-state = "off";
 +		};
 +	};
